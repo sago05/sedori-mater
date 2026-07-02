@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>利益計算 | せどりメーター</title>
+
+<!-- PWA / iOS home screen setup -->
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="利益計算">
+<meta name="theme-color" content="#14140f">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<style>
+  :root{
+    --bg:        #14140f;
+    --bg-raised: #1c1c15;
+    --line:      #3a3a2e;
+    --paper:     #f2ede0;
+    --paper-dim: #b9b39f;
+    --amber:     #e8a33d;
+    --amber-dim: #6b5326;
+    --red:       #d9634f;
+    --green:     #7fae6a;
+    --mono: 'SF Mono', 'Menlo', ui-monospace, 'Courier New', monospace;
+    --serif: 'Georgia', 'Hiragino Mincho ProN', serif;
+  }
+
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--bg); color:var(--paper);
+    font-family:'Hiragino Sans','Yu Gothic',sans-serif;
+    overscroll-behavior-y:none;
+  }
+  body{
+    padding-top:env(safe-area-inset-top);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+
+  main{ padding:14px 14px calc(64px + env(safe-area-inset-bottom)); max-width:520px; margin:0 auto; }
+
+  /* ---------- Tab navigation (fixed bottom) ---------- */
+  .tabbar{
+    position:fixed;
+    left:0; right:0; bottom:0;
+    display:flex; gap:6px;
+    background:var(--bg-raised);
+    border-top:1px solid var(--line);
+    padding:6px 10px calc(6px + env(safe-area-inset-bottom));
+    z-index:40;
+  }
+  .tab{
+    flex:1;
+    text-align:center;
+    padding:8px 6px;
+    font-size:13px;
+    font-weight:600;
+    color:var(--paper-dim);
+    letter-spacing:.02em;
+    cursor:pointer;
+    border-radius:4px;
+    border-bottom:none;
+    position:relative;
+  }
+  .tab.active{
+    color:var(--amber);
+    background:var(--amber-dim);
+  }
+  .tab .badge{
+    display:inline-block;
+    margin-left:5px;
+    font-family:var(--mono);
+    font-size:10px;
+    color:var(--paper-dim);
+    background:var(--bg-raised);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:1px 6px;
+  }
+  .tab.active .badge{ color:var(--amber); border-color:var(--amber-dim); }
+
+  .tab-panel{ display:none; }
+  .tab-panel.active{ display:block; }
+
+  /* ---------- Platform selector : f-stop dial style ---------- */
+  .platform-row{
+    display:flex; gap:6px;
+    margin:10px 0 10px;
+  }
+  .stop{
+    flex:1;
+    position:relative;
+    padding:8px 6px 7px;
+    background:var(--bg-raised);
+    border:1px solid var(--line);
+    border-radius:2px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .stop .f{
+    display:block;
+    font-family:var(--mono);
+    font-size:9px;
+    color:var(--paper-dim);
+    letter-spacing:.1em;
+    margin-bottom:2px;
+  }
+  .stop .name{
+    display:block;
+    font-size:13px;
+    font-weight:600;
+    letter-spacing:.02em;
+  }
+  .stop .rate{
+    display:block;
+    font-family:var(--mono);
+    font-size:9px;
+    color:var(--amber);
+    margin-top:2px;
+  }
+  .stop.active{
+    background:var(--amber-dim);
+    border-color:var(--amber);
+  }
+  .stop.active .name{ color:var(--paper); }
+  .stop::after{
+    content:'';
+    position:absolute; top:8px; right:8px;
+    width:6px; height:6px; border-radius:50%;
+    background:transparent; border:1px solid var(--line);
+  }
+  .stop.active::after{ background:var(--amber); border-color:var(--amber); }
+
+  /* ---------- Input fields : ledger style ---------- */
+  .field-group{
+    border:1px solid var(--line);
+    border-radius:3px;
+    overflow:hidden;
+    margin-bottom:8px;
+    background:var(--bg-raised);
+  }
+  .field{
+    display:flex; align-items:center;
+    padding:8px 12px;
+    border-bottom:1px solid var(--line);
+    position:relative;
+  }
+  .field:last-child{ border-bottom:none; }
+  .field .idx{
+    font-family:var(--mono);
+    font-size:9px;
+    color:var(--amber-dim);
+    width:18px;
+    flex-shrink:0;
+  }
+  .field label{
+    font-size:13px;
+    color:var(--paper-dim);
+    width:100px;
+    flex-shrink:0;
+    letter-spacing:.02em;
+  }
+  .field .unit-yen{
+    font-family:var(--mono);
+    color:var(--paper-dim);
+    font-size:14px;
+    margin-right:4px;
+  }
+  .field input[type="text"]{
+    flex:1;
+    background:transparent;
+    border:none;
+    outline:none;
+    color:var(--paper);
+    font-family:var(--mono);
+    font-size:16px;
+    text-align:right;
+    letter-spacing:.02em;
+    min-width:0;
+    padding:1px 0;
+  }
+  .field input::placeholder{ color:#4a4a3c; }
+
+  /* toggle-style rows for fee options */
+  .field.toggle-field{ justify-content:space-between; }
+  .field.toggle-field label{ width:auto; }
+  .toggle{
+    display:flex; background:var(--bg); border:1px solid var(--line); border-radius:20px; overflow:hidden;
+  }
+  .toggle button{
+    border:none; background:transparent; color:var(--paper-dim);
+    font-family:var(--mono); font-size:10px; letter-spacing:.05em;
+    padding:5px 10px; cursor:pointer;
+  }
+  .toggle button.active{ background:var(--amber); color:#1a1608; font-weight:700; }
+
+  .section-label{
+    font-family:var(--mono);
+    font-size:9px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--paper-dim);
+    margin:12px 2px 6px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .section-label::after{
+    content:''; flex:1; height:1px; background:var(--line);
+  }
+
+  /* ---------- Result panel : exposure meter needle ---------- */
+  .result{
+    margin-top:12px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    background:linear-gradient(180deg, var(--bg-raised), var(--bg));
+    padding:14px 14px 12px;
+    position:relative;
+    overflow:hidden;
+  }
+  .result::before{
+    content:'PROFIT / LOSS';
+    position:absolute; top:10px; right:14px;
+    font-family:var(--mono); font-size:8px; letter-spacing:.14em;
+    color:var(--paper-dim);
+  }
+  .result-main{
+    display:flex; align-items:baseline; gap:8px; margin-bottom:2px;
+  }
+  .result-main .sign{
+    font-family:var(--mono); font-size:19px; color:var(--paper-dim);
+  }
+  .result-main .amount{
+    font-family:var(--mono); font-size:32px; font-weight:600; letter-spacing:-.01em;
+    line-height:1;
+  }
+  .amount.pos{ color:var(--green); }
+  .amount.neg{ color:var(--red); }
+  .amount.zero{ color:var(--paper-dim); }
+
+  .margin-inline{
+    font-family:var(--mono);
+    font-size:18px;
+    font-weight:600;
+    letter-spacing:-.01em;
+    margin-left:12px;
+  }
+  .margin-inline.pos{ color:var(--green); }
+  .margin-inline.neg{ color:var(--red); }
+  .margin-inline.zero{ color:var(--paper-dim); }
+
+  .qty-note{
+    font-family:var(--mono); font-size:10.5px; color:var(--paper-dim);
+    margin-top:2px;
+  }
+
+  .result-sub{
+    display:flex; gap:14px; margin-top:8px; flex-wrap:wrap;
+  }
+  .result-sub .stat{ min-width:78px; }
+  .result-sub .stat .k{
+    font-family:var(--mono); font-size:8px; color:var(--paper-dim); letter-spacing:.1em; text-transform:uppercase;
+  }
+  .result-sub .stat .v{
+    font-family:var(--mono); font-size:14px; margin-top:2px; color:var(--paper);
+  }
+
+  /* needle bar */
+  .meter{
+    margin-top:10px; height:3px; border-radius:2px; background:var(--line); position:relative; overflow:visible;
+  }
+  .meter .fill{
+    position:absolute; top:0; left:50%; height:100%; border-radius:2px;
+    transition:width .25s ease, background .25s ease, left .25s ease;
+  }
+  .meter .zero-tick{
+    position:absolute; left:50%; top:-3px; width:1px; height:9px; background:var(--paper-dim);
+  }
+
+  /* ---------- Copy / export bar ---------- */
+  .actions{
+    display:flex; gap:8px; margin-top:10px;
+  }
+  .actions button{
+    flex:1;
+    padding:10px 8px;
+    border-radius:3px;
+    border:1px solid var(--line);
+    background:var(--bg-raised);
+    color:var(--paper);
+    font-size:12px;
+    font-family:inherit;
+    letter-spacing:.02em;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .actions button.primary{
+    background:var(--amber); color:#1a1608; border-color:var(--amber); font-weight:700;
+  }
+  .actions button:active{ opacity:.7; }
+
+  .toast{
+    position:fixed; left:50%; bottom:34px; transform:translate(-50%,20px);
+    background:var(--paper); color:#1a1608;
+    padding:10px 18px; border-radius:20px;
+    font-size:13px; font-weight:600;
+    opacity:0; pointer-events:none;
+    transition:opacity .2s, transform .2s;
+    z-index:50;
+    white-space:nowrap;
+  }
+  .toast.show{ opacity:1; transform:translate(-50%,0); }
+
+  ::selection{ background:var(--amber); color:#1a1608; }
+
+  /* ---------- History tab ---------- */
+  .history-summary{
+    display:flex; justify-content:space-between; align-items:baseline;
+    border:1px solid var(--line);
+    border-radius:3px;
+    background:linear-gradient(180deg, var(--bg-raised), var(--bg));
+    padding:14px 16px;
+    margin-bottom:14px;
+  }
+  .history-summary .label{
+    font-family:var(--mono); font-size:10px; color:var(--paper-dim); letter-spacing:.1em;
+  }
+  .history-summary .total-profit{
+    font-family:var(--mono); font-size:26px; font-weight:600; margin-top:2px;
+  }
+  .history-summary .count{
+    font-family:var(--mono); font-size:11px; color:var(--paper-dim); text-align:right;
+  }
+  .history-summary .count b{ color:var(--paper); font-size:15px; }
+
+  .date-nav{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .date-nav .date-label{
+    font-family:var(--mono); font-size:13px; color:var(--paper); font-weight:600; letter-spacing:.02em;
+  }
+  .date-nav button{
+    background:var(--bg-raised); border:1px solid var(--line); color:var(--paper-dim);
+    width:30px; height:30px; border-radius:3px; font-size:15px; cursor:pointer;
+  }
+  .date-nav button:disabled{ opacity:.3; }
+
+  .history-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+  .history-row{
+    border:1px solid var(--line);
+    border-radius:3px;
+    background:var(--bg-raised);
+    padding:10px 30px 10px 12px;
+    position:relative;
+  }
+  .history-row .top-line{
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+  }
+  .history-row .item-name{
+    font-size:13.5px; color:var(--paper); font-weight:600;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .history-row .item-profit{
+    font-family:var(--mono); font-size:15px; font-weight:600; flex-shrink:0;
+  }
+  .history-row .item-profit.pos{ color:var(--green); }
+  .history-row .item-profit.neg{ color:var(--red); }
+  .history-row .item-profit.zero{ color:var(--paper-dim); }
+  .history-row .sub-line{
+    display:flex; gap:12px; margin-top:4px;
+    font-family:var(--mono); font-size:10.5px; color:var(--paper-dim);
+  }
+  .history-row .del-btn{
+    position:absolute; top:50%; right:6px;
+    transform:translateY(-50%);
+    width:22px; height:22px;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--paper-dim); font-size:14px; cursor:pointer;
+    opacity:.5;
+  }
+  .history-row .del-btn:active{ opacity:1; }
+
+  .empty-state{
+    text-align:center; padding:40px 20px; color:var(--paper-dim); font-size:13px; line-height:1.7;
+  }
+
+  .history-actions{
+    display:flex; gap:8px; margin-top:4px;
+  }
+  .history-actions button{
+    flex:1;
+    padding:12px 8px;
+    border-radius:3px;
+    border:1px solid var(--line);
+    background:var(--bg-raised);
+    color:var(--paper);
+    font-size:13px;
+    font-family:inherit;
+    letter-spacing:.02em;
+    cursor:pointer;
+  }
+  .history-actions button.primary{
+    background:var(--amber); color:#1a1608; border-color:var(--amber); font-weight:700;
+  }
+  .history-actions button:active{ opacity:.7; }
+</style>
+</head>
+<body>
+
+<main>
+
+  <div class="tab-panel active" id="panel-calc">
+
+  <div class="section-label">商品名</div>
+  <div class="field-group">
+    <div class="field">
+      <span class="idx">N</span>
+      <label for="itemName">商品名</label>
+      <input type="text" id="itemName" placeholder="例）NIKKOR Z 40mm f/2" autocomplete="off" style="text-align:left;">
+    </div>
+  </div>
+
+  <div class="section-label">販売手数料率</div>
+  <div class="platform-row" id="platformRow">
+    <div class="stop" data-rate="10">
+      <span class="f">01</span>
+      <span class="name">10%</span>
+      <span class="rate">ヤフオク／メルカリ</span>
+    </div>
+    <div class="stop" data-rate="5">
+      <span class="f">02</span>
+      <span class="name">5%</span>
+      <span class="rate">PayPayフリマ</span>
+    </div>
+    <div class="stop" data-rate="custom">
+      <span class="f">03</span>
+      <span class="name">手動</span>
+      <span class="rate">直接入力</span>
+    </div>
+  </div>
+  <div class="field-group" id="customRateGroup" style="display:none;">
+    <div class="field">
+      <span class="idx">R</span>
+      <label for="customRate">手数料率</label>
+      <span class="unit-yen">%</span>
+      <input type="text" inputmode="decimal" id="customRate" placeholder="0" autocomplete="off">
+    </div>
+  </div>
+
+  <div class="section-label">売上・原価</div>
+  <div class="field-group">
+    <div class="field">
+      <span class="idx">A</span>
+      <label for="salePrice">販売価格(1個)</label>
+      <span class="unit-yen">¥</span>
+      <input type="text" inputmode="numeric" id="salePrice" placeholder="0" autocomplete="off">
+    </div>
+    <div class="field">
+      <span class="idx">B</span>
+      <label for="costPrice">仕入値(1個)</label>
+      <span class="unit-yen">¥</span>
+      <input type="text" inputmode="numeric" id="costPrice" placeholder="0" autocomplete="off">
+    </div>
+    <div class="field">
+      <span class="idx">Q</span>
+      <label for="itemQty">仕入れ数</label>
+      <span class="unit-yen">×</span>
+      <input type="text" inputmode="numeric" id="itemQty" placeholder="1" value="1" autocomplete="off">
+    </div>
+  </div>
+
+  <div class="section-label">送料</div>
+  <div class="field-group">
+    <div class="field">
+      <span class="idx">C</span>
+      <label for="shipCost">送料</label>
+      <span class="unit-yen">¥</span>
+      <input type="text" inputmode="numeric" id="shipCost" placeholder="0" autocomplete="off">
+    </div>
+    <div class="field toggle-field">
+      <label>送料込み出品</label>
+      <div class="toggle" id="shipIncludedToggle">
+        <button data-val="1" class="active">送料込み</button>
+        <button data-val="0">送料別</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ RESULT ============ -->
+  <div class="result">
+    <div class="result-main">
+      <span class="sign" id="resultSign">¥</span>
+      <span class="amount zero" id="resultAmount">0</span>
+      <span class="margin-inline" id="resultMargin">利益率 —%</span>
+    </div>
+    <div class="qty-note" id="qtyNote" style="display:none;"></div>
+
+    <div class="meter">
+      <div class="zero-tick"></div>
+      <div class="fill" id="meterFill"></div>
+    </div>
+
+    <div class="result-sub">
+      <div class="stat">
+        <div class="k">ROI</div>
+        <div class="v" id="roiValue">—%</div>
+      </div>
+      <div class="stat">
+        <div class="k">手数料</div>
+        <div class="v" id="feeValue">¥0</div>
+      </div>
+      <div class="stat">
+        <div class="k">総コスト</div>
+        <div class="v" id="totalCostValue">¥0</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="saveBtn" class="primary">今日の履歴に追加</button>
+    </div>
+  </div>
+
+  </div><!-- /panel-calc -->
+
+  <div class="tab-panel" id="panel-history">
+
+    <div class="date-nav">
+      <button id="prevDateBtn" aria-label="前の日">‹</button>
+      <div class="date-label" id="currentDateLabel">—</div>
+      <button id="nextDateBtn" aria-label="次の日">›</button>
+    </div>
+
+    <div class="history-summary">
+      <div>
+        <div class="label">本日の見込み利益合計</div>
+        <div class="total-profit zero" id="dayTotalProfit">¥0</div>
+      </div>
+      <div class="count">
+        件数<br><b id="dayCount">0</b>件
+      </div>
+    </div>
+
+    <div class="history-list" id="historyList">
+      <div class="empty-state" id="historyEmpty">まだ登録がありません。<br>「計算」タブから仕入れを登録してください。</div>
+    </div>
+
+    <div class="history-actions">
+      <button id="csvExportBtn">CSV出力(コピー)</button>
+      <button id="clearDayBtn" class="primary">この日の履歴をクリア</button>
+    </div>
+
+  </div><!-- /panel-history -->
+
+</main>
+
+<div class="tabbar">
+  <div class="tab active" data-tab="calc">計算</div>
+  <div class="tab" data-tab="history">今日の履歴<span class="badge" id="todayBadge">0</span></div>
+</div>
+
+<div class="toast" id="toast">コピーしました</div>
+
+<script>
+(function(){
+  "use strict";
+
+  let currentRateMode = '10'; // '10' | '5' | 'custom'
+  let shipIncluded = 1;
+
+  const $ = id => document.getElementById(id);
+
+  function todayKey(){
+    const d = new Date();
+    const p = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+  }
+  function formatDateLabel(key){
+    const [y,m,d] = key.split('-').map(Number);
+    const dt = new Date(y, m-1, d);
+    const wd = ['日','月','火','水','木','金','土'][dt.getDay()];
+    const isToday = key === todayKey();
+    return `${y}/${m}/${d}(${wd})${isToday ? ' ・ 今日' : ''}`;
+  }
+
+  // ---- tabs ----
+  document.querySelectorAll('.tab').forEach(tabEl=>{
+    tabEl.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+      tabEl.classList.add('active');
+      $('panel-' + tabEl.dataset.tab).classList.add('active');
+      if (tabEl.dataset.tab === 'history') renderHistory();
+    });
+  });
+
+  // ---- fee rate selector ----
+  document.querySelectorAll('.stop').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      document.querySelectorAll('.stop').forEach(s=>s.classList.remove('active'));
+      el.classList.add('active');
+      currentRateMode = el.dataset.rate;
+      $('customRateGroup').style.display = (currentRateMode === 'custom') ? 'block' : 'none';
+      if (currentRateMode === 'custom') $('customRate').focus();
+      compute();
+    });
+  });
+  document.querySelector('.stop[data-rate="10"]').classList.add('active');
+
+  $('customRate').addEventListener('input', ()=>{
+    let raw = $('customRate').value.replace(/[^0-9.]/g,'');
+    const parts = raw.split('.');
+    if (parts.length > 2) raw = parts[0] + '.' + parts.slice(1).join('');
+    $('customRate').value = raw;
+    compute();
+  });
+
+  function activeRate(){
+    if (currentRateMode === 'custom') {
+      const v = parseFloat($('customRate').value);
+      return isNaN(v) ? 0 : v;
+    }
+    return parseFloat(currentRateMode);
+  }
+
+  // ---- toggles ----
+  function wireToggle(containerId, onChange){
+    const container = $(containerId);
+    container.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        container.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        onChange(parseInt(btn.dataset.val,10));
+        compute();
+      });
+    });
+  }
+  wireToggle('shipIncludedToggle', v => shipIncluded = v);
+
+  // ---- number inputs: format with commas as you type ----
+  const numFields = ['salePrice','costPrice','shipCost','itemQty'];
+  numFields.forEach(id=>{
+    const el = $(id);
+    el.addEventListener('input', ()=>{
+      let raw = el.value.replace(/[^0-9]/g,'');
+      el.value = raw === '' ? '' : Number(raw).toLocaleString('ja-JP');
+      compute();
+    });
+    el.addEventListener('focus', ()=>{ el.select(); });
+  });
+
+  function num(id){
+    const raw = $(id).value.replace(/[^0-9]/g,'');
+    return raw === '' ? 0 : parseInt(raw,10);
+  }
+
+  function qty(){
+    const raw = $('itemQty').value.replace(/[^0-9]/g,'');
+    const n = raw === '' ? 1 : parseInt(raw,10);
+    return n < 1 ? 1 : n;
+  }
+
+  function yen(n){
+    const sign = n < 0 ? '−' : '';
+    return sign + '¥' + Math.abs(Math.round(n)).toLocaleString('ja-JP');
+  }
+
+  function compute(){
+    const saleUnit = num('salePrice');
+    const costUnit = num('costPrice');
+    const shipUnit = num('shipCost');
+    const q = qty();
+    const itemName = $('itemName').value.trim();
+
+    const sale = saleUnit * q;
+    const cost = costUnit * q;
+    const shipCost = shipUnit * q;
+
+    const rate = activeRate();
+    const feeAmount = sale * (rate/100);
+    const shippingBurden = (shipIncluded === 1) ? shipCost : 0;
+
+    const totalRevenue = sale;
+    const totalCost = cost + feeAmount + shippingBurden;
+    const profit = totalRevenue - totalCost;
+    const margin = totalRevenue > 0 ? (profit/totalRevenue*100) : 0;
+    const roi = cost > 0 ? (profit/cost*100) : 0;
+
+    const amountEl = $('resultAmount');
+    amountEl.textContent = Math.abs(Math.round(profit)).toLocaleString('ja-JP');
+    amountEl.classList.remove('pos','neg','zero');
+    $('resultSign').textContent = profit < 0 ? '−¥' : '¥';
+    if (profit > 0) amountEl.classList.add('pos');
+    else if (profit < 0) amountEl.classList.add('neg');
+    else amountEl.classList.add('zero');
+
+    const marginEl = $('resultMargin');
+    marginEl.textContent = totalRevenue>0 ? `利益率 ${margin.toFixed(1)}%` : '利益率 —%';
+    marginEl.classList.remove('pos','neg','zero');
+    if (totalRevenue>0) {
+      if (margin > 0) marginEl.classList.add('pos');
+      else if (margin < 0) marginEl.classList.add('neg');
+      else marginEl.classList.add('zero');
+    } else {
+      marginEl.classList.add('zero');
+    }
+    $('roiValue').textContent = cost>0 ? roi.toFixed(1)+'%' : '—%';
+    $('feeValue').textContent = yen(feeAmount);
+    $('totalCostValue').textContent = yen(totalCost);
+
+    const clamped = Math.max(-30, Math.min(50, margin));
+    const pct = Math.abs(clamped) / 50 * 50;
+    const fill = $('meterFill');
+    fill.style.width = pct + '%';
+    if (clamped >= 0) {
+      fill.style.left = '50%';
+      fill.style.background = 'var(--green)';
+    } else {
+      fill.style.left = (50 - pct) + '%';
+      fill.style.background = 'var(--red)';
+    }
+
+    const qtyNoteEl = $('qtyNote');
+    if (q > 1) {
+      qtyNoteEl.style.display = 'block';
+      qtyNoteEl.textContent = `${q}個 × 1個あたり利益 ¥${Math.round(profit/q).toLocaleString('ja-JP')}`;
+    } else {
+      qtyNoteEl.style.display = 'none';
+    }
+
+    lastResult = { itemName, qty: q, saleUnit, costUnit, sale, cost, shipCost, rate, shipIncluded, feeAmount, shippingBurden, totalRevenue, totalCost, profit, margin, roi };
+  }
+
+  let lastResult = null;
+
+  // ==========================================================
+  // History storage: { "YYYY-MM-DD": [ {id, itemName, sale, cost, ...}, ... ] }
+  // ==========================================================
+  const STORAGE_KEY = 'sedori_history_v2';
+  let historyStore = {};
+  try{
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if(saved) historyStore = JSON.parse(saved);
+  }catch(e){ historyStore = {}; }
+
+  function saveStore(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(historyStore)); }catch(e){}
+  }
+
+  function sortedDateKeys(){
+    return Object.keys(historyStore).sort(); // ascending
+  }
+
+  let viewDate = todayKey(); // which date the history tab is currently viewing
+
+  // ---- add to today's history (always adds to TODAY, regardless of viewDate) ----
+  $('saveBtn').addEventListener('click', ()=>{
+    if(!lastResult) return;
+    const r = lastResult;
+    if (r.sale === 0 && r.cost === 0) {
+      showToast('金額を入力してください');
+      return;
+    }
+    const key = todayKey();
+    if (!historyStore[key]) historyStore[key] = [];
+    historyStore[key].push({
+      id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
+      itemName: r.itemName || '(名称未入力)',
+      qty: r.qty, saleUnit: r.saleUnit, costUnit: r.costUnit,
+      sale: r.sale, cost: r.cost, shipCost: r.shipCost,
+      rate: r.rate, shipIncluded: r.shipIncluded,
+      feeAmount: r.feeAmount, shippingBurden: r.shippingBurden,
+      totalCost: r.totalCost, profit: r.profit, margin: r.margin, roi: r.roi,
+      time: new Date().toISOString()
+    });
+    saveStore();
+    updateTodayBadge();
+    showToast(`「${r.itemName || '(名称未入力)'}」を今日の履歴に追加しました`);
+
+    // reset item name field for the next entry, keep other settings
+    $('itemName').value = '';
+    $('salePrice').value = '';
+    $('costPrice').value = '';
+    $('shipCost').value = '';
+    $('itemQty').value = '1';
+    compute();
+  });
+
+  function updateTodayBadge(){
+    const key = todayKey();
+    const count = (historyStore[key] || []).length;
+    $('todayBadge').textContent = count;
+  }
+
+  // ---- date navigation ----
+  $('prevDateBtn').addEventListener('click', ()=>{
+    const keys = sortedDateKeys();
+    const idx = keys.indexOf(viewDate);
+    if (idx > 0) { viewDate = keys[idx-1]; renderHistory(); }
+    else {
+      // if viewDate not in store yet (e.g. today with 0 entries) find nearest before
+      const before = keys.filter(k => k < viewDate);
+      if (before.length) { viewDate = before[before.length-1]; renderHistory(); }
+    }
+  });
+  $('nextDateBtn').addEventListener('click', ()=>{
+    const keys = sortedDateKeys();
+    const idx = keys.indexOf(viewDate);
+    if (idx !== -1 && idx < keys.length-1) { viewDate = keys[idx+1]; renderHistory(); }
+  });
+
+  function renderHistory(){
+    const keys = sortedDateKeys();
+    // ensure today is navigable even if empty
+    const allKeys = keys.includes(todayKey()) ? keys : keys.concat([todayKey()]).sort();
+
+    $('currentDateLabel').textContent = formatDateLabel(viewDate);
+
+    const idx = allKeys.indexOf(viewDate);
+    $('prevDateBtn').disabled = (idx <= 0);
+    $('nextDateBtn').disabled = (idx === -1 || idx >= allKeys.length-1);
+
+    const items = historyStore[viewDate] || [];
+    const listEl = $('historyList');
+    const emptyEl = $('historyEmpty');
+
+    listEl.querySelectorAll('.history-row').forEach(r=>r.remove());
+
+    if (items.length === 0) {
+      emptyEl.style.display = 'block';
+    } else {
+      emptyEl.style.display = 'none';
+      items.slice().reverse().forEach(item=>{
+        const row = document.createElement('div');
+        row.className = 'history-row';
+        const profitClass = item.profit > 0 ? 'pos' : (item.profit < 0 ? 'neg' : 'zero');
+        const timeStr = new Date(item.time).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+        const q = item.qty || 1;
+        const nameWithQty = escapeHtml(item.itemName) + (q > 1 ? ` <span style="color:var(--paper-dim);font-weight:400;">×${q}</span>` : '');
+        row.innerHTML = `
+          <div class="top-line">
+            <div class="item-name">${nameWithQty}</div>
+            <div class="item-profit ${profitClass}">${item.profit<0?'−':''}¥${Math.abs(Math.round(item.profit)).toLocaleString('ja-JP')}</div>
+          </div>
+          <div class="sub-line">
+            <span>${timeStr}</span>
+            <span>売¥${item.sale.toLocaleString('ja-JP')}</span>
+            <span>仕¥${item.cost.toLocaleString('ja-JP')}</span>
+            <span>利益率${item.margin.toFixed(1)}%</span>
+          </div>
+          <div class="del-btn" data-id="${item.id}">✕</div>
+        `;
+        listEl.appendChild(row);
+      });
+    }
+
+    // summary
+    const totalProfit = items.reduce((s,i)=>s+i.profit, 0);
+    const totalEl = $('dayTotalProfit');
+    totalEl.textContent = (totalProfit<0?'−':'') + '¥' + Math.abs(Math.round(totalProfit)).toLocaleString('ja-JP');
+    totalEl.classList.remove('pos','neg','zero');
+    totalEl.classList.add(totalProfit>0?'pos':(totalProfit<0?'neg':'zero'));
+    $('dayCount').textContent = items.length;
+
+    updateTodayBadge();
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // delete individual entry
+  $('historyList').addEventListener('click', (e)=>{
+    const btn = e.target.closest('.del-btn');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const items = historyStore[viewDate] || [];
+    historyStore[viewDate] = items.filter(i=>i.id !== id);
+    if (historyStore[viewDate].length === 0) delete historyStore[viewDate];
+    saveStore();
+    renderHistory();
+  });
+
+  // clear entire day
+  $('clearDayBtn').addEventListener('click', ()=>{
+    const items = historyStore[viewDate] || [];
+    if (items.length === 0) { showToast('この日の履歴は空です'); return; }
+    if (!confirm(`${formatDateLabel(viewDate)}の履歴(${items.length}件)を全て削除します。よろしいですか？`)) return;
+    delete historyStore[viewDate];
+    saveStore();
+    renderHistory();
+  });
+
+  // CSV export for the currently viewed date
+  $('csvExportBtn').addEventListener('click', ()=>{
+    const items = historyStore[viewDate] || [];
+    if (items.length === 0) { showToast('この日の履歴は空です'); return; }
+    const header = "日付,時刻,商品名,数量,販売価格(1個),仕入値(1個),手数料率,送料区分,販売価格合計,仕入値合計,送料,手数料,送料負担,総コスト,純利益,利益率(%),ROI(%)\n";
+    const body = items.map(i=>{
+      const t = new Date(i.time);
+      const timeStr = t.toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+      const shipMode = i.shipIncluded === 1 ? '送料込み' : '送料別';
+      const nameEscaped = '"' + String(i.itemName).replace(/"/g,'""') + '"';
+      const q = i.qty || 1;
+      const saleUnit = i.saleUnit != null ? i.saleUnit : i.sale;
+      const costUnit = i.costUnit != null ? i.costUnit : i.cost;
+      return [
+        viewDate, timeStr, nameEscaped, q, saleUnit, costUnit, i.rate+'%', shipMode,
+        i.sale, i.cost, i.shipCost,
+        Math.round(i.feeAmount), Math.round(i.shippingBurden), Math.round(i.totalCost),
+        Math.round(i.profit), i.margin.toFixed(1), i.roi.toFixed(1)
+      ].join(',');
+    }).join('\n');
+    const csv = header + body;
+    copyToClipboard(csv);
+    showToast(`CSVをコピーしました(${items.length}件)`);
+  });
+
+  function copyToClipboard(text){
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).catch(()=>{ fallbackCopy(text); });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+  function fallbackCopy(text){
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try{ document.execCommand('copy'); }catch(e){}
+    document.body.removeChild(ta);
+  }
+
+  let toastTimer;
+  function showToast(msg){
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>t.classList.remove('show'), 1800);
+  }
+
+  // initial render
+  compute();
+  updateTodayBadge();
+
+  // ---- register service worker for offline/home-screen use ----
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', ()=>{
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    });
+  }
+})();
+</script>
+</body>
+</html>

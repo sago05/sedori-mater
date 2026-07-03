@@ -40,7 +40,7 @@
     padding-bottom:env(safe-area-inset-bottom);
   }
 
-  main{ padding:14px 14px calc(64px + env(safe-area-inset-bottom)); max-width:520px; margin:0 auto; }
+  main{ padding:14px 14px calc(56px + env(safe-area-inset-bottom)); max-width:520px; margin:0 auto; }
 
   /* ---------- Tab navigation (fixed bottom) ---------- */
   .tabbar{
@@ -140,12 +140,12 @@
     border:1px solid var(--line);
     border-radius:3px;
     overflow:hidden;
-    margin-bottom:8px;
+    margin-bottom:6px;
     background:var(--bg-raised);
   }
   .field{
     display:flex; align-items:center;
-    padding:8px 12px;
+    padding:13px 12px;
     border-bottom:1px solid var(--line);
     position:relative;
   }
@@ -204,7 +204,7 @@
     letter-spacing:.14em;
     text-transform:uppercase;
     color:var(--paper-dim);
-    margin:12px 2px 6px;
+    margin:9px 2px 6px;
     display:flex; align-items:center; gap:8px;
   }
   .section-label::after{
@@ -363,6 +363,19 @@
   .history-row .item-name{
     font-size:13.5px; color:var(--paper); font-weight:600;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    cursor:pointer;
+    border-bottom:1px dotted var(--paper-dim);
+    padding-bottom:1px;
+  }
+  .history-row .item-name.empty{
+    color:var(--paper-dim); font-weight:400; font-style:italic;
+  }
+  .history-row .item-name-input{
+    font-size:16px; font-weight:600; font-family:inherit;
+    color:var(--paper); background:var(--bg);
+    border:1px solid var(--amber); border-radius:2px;
+    padding:2px 6px; outline:none;
+    width:100%; max-width:60%;
   }
   .history-row .item-profit{
     font-family:var(--mono); font-size:15px; font-weight:600; flex-shrink:0;
@@ -420,7 +433,8 @@
     <div class="field">
       <span class="idx">N</span>
       <label for="itemName">商品名</label>
-      <input type="text" id="itemName" placeholder="例）NIKKOR Z 40mm f/2" autocomplete="off" style="text-align:left;">
+      <input type="text" id="itemName" list="itemNameOptions" placeholder="例）NIKKOR Z 40mm f/2" autocomplete="off" style="text-align:left;">
+      <datalist id="itemNameOptions"></datalist>
     </div>
   </div>
 
@@ -778,6 +792,7 @@
     });
     saveStore();
     updateTodayBadge();
+    updateItemNameOptions();
     showToast(`「${r.itemName || '(名称未入力)'}」を今日の履歴に追加しました`);
 
     // reset item name field for the next entry, keep other settings
@@ -793,6 +808,27 @@
     const key = todayKey();
     const count = (historyStore[key] || []).length;
     $('todayBadge').textContent = count;
+  }
+
+  // ---- item name autocomplete (datalist from all past history) ----
+  function updateItemNameOptions(){
+    const seen = new Set();
+    const names = [];
+    // iterate dates newest-first so most recent item names appear first
+    const keys = sortedDateKeys().slice().reverse();
+    keys.forEach(key=>{
+      const items = historyStore[key] || [];
+      // within a day, newest entries are at the end of the array
+      items.slice().reverse().forEach(item=>{
+        const name = (item.itemName || '').trim();
+        if (name && name !== '(名称未入力)' && !seen.has(name)) {
+          seen.add(name);
+          names.push(name);
+        }
+      });
+    });
+    const datalist = $('itemNameOptions');
+    datalist.innerHTML = names.map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
   }
 
   // ---- date navigation ----
@@ -839,10 +875,12 @@
         const profitClass = item.profit > 0 ? 'pos' : (item.profit < 0 ? 'neg' : 'zero');
         const timeStr = new Date(item.time).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
         const q = item.qty || 1;
-        const nameWithQty = escapeHtml(item.itemName) + (q > 1 ? ` <span style="color:var(--paper-dim);font-weight:400;">×${q}</span>` : '');
+        const isEmpty = !item.itemName || item.itemName === '(名称未入力)';
+        const displayName = isEmpty ? '(名称未入力・タップして入力)' : escapeHtml(item.itemName);
+        const nameWithQty = displayName + (q > 1 ? ` <span style="color:var(--paper-dim);font-weight:400;">×${q}</span>` : '');
         row.innerHTML = `
           <div class="top-line">
-            <div class="item-name">${nameWithQty}</div>
+            <div class="item-name${isEmpty?' empty':''}" data-id="${item.id}">${nameWithQty}</div>
             <div class="item-profit ${profitClass}">${item.profit<0?'−':''}¥${Math.abs(Math.round(item.profit)).toLocaleString('ja-JP')}</div>
           </div>
           <div class="sub-line">
@@ -874,6 +912,45 @@
     return div.innerHTML;
   }
 
+  // edit item name inline
+  $('historyList').addEventListener('click', (e)=>{
+    const nameEl = e.target.closest('.item-name');
+    if (!nameEl || nameEl.querySelector('input')) return;
+    const id = nameEl.dataset.id;
+    const items = historyStore[viewDate] || [];
+    const item = items.find(i=>i.id === id);
+    if (!item) return;
+
+    const currentName = (item.itemName && item.itemName !== '(名称未入力)') ? item.itemName : '';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'item-name-input';
+    input.value = currentName;
+    input.setAttribute('list', 'itemNameOptions');
+    input.setAttribute('autocomplete', 'off');
+
+    nameEl.textContent = '';
+    nameEl.classList.remove('empty');
+    nameEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    function commit(){
+      const newName = input.value.trim();
+      item.itemName = newName || '(名称未入力)';
+      saveStore();
+      updateItemNameOptions();
+      renderHistory();
+    }
+    let committed = false;
+    input.addEventListener('blur', ()=>{ if(!committed){ committed = true; commit(); } });
+    input.addEventListener('keydown', (ev)=>{
+      if (ev.key === 'Enter') { committed = true; commit(); }
+      if (ev.key === 'Escape') { committed = true; renderHistory(); }
+    });
+  });
+
   // delete individual entry
   $('historyList').addEventListener('click', (e)=>{
     const btn = e.target.closest('.del-btn');
@@ -883,6 +960,7 @@
     historyStore[viewDate] = items.filter(i=>i.id !== id);
     if (historyStore[viewDate].length === 0) delete historyStore[viewDate];
     saveStore();
+    updateItemNameOptions();
     renderHistory();
   });
 
@@ -893,6 +971,7 @@
     if (!confirm(`${formatDateLabel(viewDate)}の履歴(${items.length}件)を全て削除します。よろしいですか？`)) return;
     delete historyStore[viewDate];
     saveStore();
+    updateItemNameOptions();
     renderHistory();
   });
 
@@ -951,6 +1030,7 @@
   // initial render
   compute();
   updateTodayBadge();
+  updateItemNameOptions();
 
   // ---- register service worker for offline/home-screen use ----
   if ('serviceWorker' in navigator) {
